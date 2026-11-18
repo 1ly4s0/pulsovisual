@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en" data-theme="pulse">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Online music visualizer and video maker | PulsoVisual</title>
+    <meta name="description" content="Make your track drive a spectrum, a circle or a field of particles. Pick the background and download it as a video.">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#15131c">
+    <link rel="canonical" href="https://1ly4s0.github.io/pulsovisual/en/">
+    <link rel="alternate" hreflang="es" href="https://1ly4s0.github.io/pulsovisual/">
+    <link rel="alternate" hreflang="en" href="https://1ly4s0.github.io/pulsovisual/en/">
+    <link rel="alternate" hreflang="x-default" href="https://1ly4s0.github.io/pulsovisual/">
+    <link rel="icon" type="image/png" href="../assets/logo.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="PulsoVisual">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:url" content="https://1ly4s0.github.io/pulsovisual/en/">
+    <meta property="og:title" content="Online music visualizer and video maker | PulsoVisual">
+    <meta property="og:description" content="Make your track drive a spectrum, a circle or a field of particles. Pick the background and download it as a video.">
+    <meta property="og:image" content="https://1ly4s0.github.io/pulsovisual/assets/share.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Editor preview for PulsoVisual">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="../assets/style.css">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "PulsoVisual", "url": "https://1ly4s0.github.io/pulsovisual/en/", "description": "Make your track drive a spectrum, a circle or a field of particles. Pick the background and download it as a video.", "inLanguage": "en", "applicationCategory": "MultimediaApplication", "operatingSystem": "Any", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "image": "https://1ly4s0.github.io/pulsovisual/assets/share.png"}</script>
+    <script type="module" src="../assets/visual-studio.js"></script>
+</head>
+<body>
+    <header class="site-header">
+        <nav class="shell" aria-label="Main navigation">
+            <a class="brand" href="./"><img src="../assets/logo.png" alt="" height="35" width="35">PulsoVisual</a>
+            <div class="nav-links">
+                <a class="guide-link" href="#guia">How it works</a>
+                <a class="faq-link" href="#faq">FAQ</a>
+                <a class="language" href="../" hreflang="es" lang="es" aria-label="Ver en español">ES</a>
+            </div>
+        </nav>
+    </header>
+    <main>
+        <section class="hero shell">
+            <div class="intro">
+                <p class="tool-type">Music visualizer</p>
+                <h1>Draw <em>your music.</em></h1>
+                <p class="lede">Make your track drive a spectrum, a circle or a field of particles. Pick the background and download it as a video.</p>
+                <p class="privacy"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 4v2"/></svg> Your file stays on your device.</p>
+            </div>
+            <section class="studio" id="studio" aria-labelledby="editor-title">
+                <div class="studio-title"><h2 id="editor-title">Visualizer canvas</h2><span id="preview-label">Sample preview</span></div>
+                <div class="screen visual-screen"><canvas id="preview" aria-hidden="true"></canvas></div>
+                <div class="transport" id="transport" hidden>
+                    <button id="listen" type="button" disabled>Play</button>
+                    <input id="seek" type="range" min="0" max="1" value="0" step=".01" aria-label="Playback position" disabled>
+                    <span id="elapsed">0:00</span>
+                </div>
+                <div class="file-picker">
+                    <input id="file" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac">
+                    <label for="file">
+                        <span class="upload-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4"/></svg></span>
+                        <span class="file-info"><strong id="filename">Choose a file</strong><small id="file-detail">MP3, WAV, OGG and more</small></span>
+                        <span class="upload-arrow"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span>
+                    </label>
+                </div>
+                <fieldset id="settings">
+                    <legend>Settings</legend>
+                    <div class="settings-grid"><div class="field">
+                        <label for="visual-mode">Visualization</label>
+                        <select id="visual-mode"><option value="circle">Circle</option><option value="bars">Spectrum</option><option value="particles">Particles</option></select>
+                    </div>
+<div class="field">
+                        <label for="aspect">Aspect ratio</label>
+                        <select id="aspect"><option value="wide">16:9 · Landscape</option><option value="vertical">9:16 · Portrait</option></select>
+                    </div>
+<div class="field">
+                        <label for="pulse-color">Pulse color</label>
+                        <input type="color" id="pulse-color" value="#f999e2">
+                    </div>
+<div class="field">
+                        <label for="stage-color">Background color</label>
+                        <input type="color" id="stage-color" value="#140d22">
+                    </div>
+<div class="field">
+                        <label for="intensity">Intensity <output for="intensity">100%</output></label>
+                        <input id="intensity" type="range" min="25" max="175" value="100" data-unit="%">
+                    </div>
+<div class="field">
+                        <label for="background">Background image</label>
+                        <input type="file" id="background" accept="image/*">
+                    </div></div>
+                </fieldset>
+                <div class="action-row"><button id="cancel-render" type="button" hidden>Cancel</button>
+                    <button id="save" class="save" type="button" disabled>Download</button></div>
+                <p id="status" class="status" role="status" aria-live="polite"></p>
+            </section>
+        </section>
+        <section class="guide-band" id="guia">
+            <div class="guide shell">
+                <h2>How to make a video that reacts to music</h2>
+                <ol><li><h3>Open your track</h3><p>Pick audio from your device and hit play to see how the canvas reacts.</p></li>
+<li><h3>Choose the look</h3><p>Change the layout, adjust the intensity and try a background that fits the song.</p></li>
+<li><h3>Pick a size and save</h3><p>Use 16:9 for YouTube or 9:16 for Shorts, Reels and TikTok.</p></li></ol>
+            </div>
+        </section>
+        <section class="faqs shell" id="faq">
+            <h2>Frequently asked questions</h2>
+            <div><details><summary>Does the video include the track?</summary><p>Yes. The video contains the track you opened and the animation from the visualizer.</p></details>
+<details><summary>Can I use a background image?</summary><p>Yes. Pick a solid color or choose a background image from your device.</p></details>
+<details><summary>Is my file uploaded?</summary><p>The file is processed in your browser. You don’t need an account.</p></details>
+<details><summary>How long does video export take?</summary><p>It records while the clip plays, so export usually takes about as long as the clip. Your browser determines whether it saves as MP4 or WebM.</p></details></div>
+        </section>
+        <section class="other shell">
+            <h2>More tools</h2>
+            <nav class="tools-list" aria-label="Other tools"><a href="https://1ly4s0.github.io/subgrave/en/">Subgrave</a>
+<a href="https://1ly4s0.github.io/afinavoz/en/">Afinavoz</a>
+<a href="https://1ly4s0.github.io/cinta90/en/">Cinta90</a>
+<a href="https://1ly4s0.github.io/planovertical/en/">PlanoVertical</a>
+<a href="https://slowedreverb.net/en/">SlowedReverb</a></nav>
+        </section>
+    </main>
+    <footer class="footer shell">
+        <span>PulsoVisual · TECNO BROS</span>
+        <a href="https://github.com/1ly4s0/pulsovisual">View source on GitHub</a>
+    </footer>
+</body>
+</html>
