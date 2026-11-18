@@ -4,6 +4,11 @@ import { cover } from './frame.js';
 export const suffix = 'pulsovisual';
 export const acceptsImage = false;
 export const acceptsAudio = true;
+export const looks = [
+    { 'visual-mode': 'circle', 'pulse-color': '#f999e2', 'stage-color': '#140d22', intensity: 100, glow: 46 },
+    { 'visual-mode': 'bars', 'pulse-color': '#8ce7d7', 'stage-color': '#092433', intensity: 130, glow: 66 },
+    { 'visual-mode': 'particles', 'pulse-color': '#f7be92', 'stage-color': '#280c30', intensity: 114, glow: 72 }
+];
 const bands = new Uint8Array(512);
 const levels = new Float32Array(64);
 
@@ -13,7 +18,8 @@ export function readSettings() {
         aspect: byId('aspect').value,
         color: byId('pulse-color').value,
         background: byId('stage-color').value,
-        intensity: number('intensity') / 100
+        intensity: number('intensity') / 100,
+        glow: number('glow') / 100
     };
 }
 
@@ -116,7 +122,11 @@ export function draw(drawing, _media, settings, { width, height, time, analyser,
     drawing.fillStyle = bloom;
     drawing.fillRect(0, 0, width, height);
     readBands(analyser, time, settings.intensity);
+    drawing.save();
+    drawing.shadowColor = settings.color;
+    drawing.shadowBlur = settings.glow * Math.min(width, height) * .018;
     if (settings.style === 'bars') spectrum(drawing, width, height, settings.color);
     else if (settings.style === 'particles') particles(drawing, width, height, settings.color, time);
     else circle(drawing, width, height, settings.color);
+    drawing.restore();
 }

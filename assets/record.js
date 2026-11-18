@@ -36,15 +36,24 @@ export async function seek(media, time) {
     });
 }
 
-export async function recordCanvas({ canvas, media, audioTrack, draw, signal }) {
+export async function recordCanvas({ canvas, media, audioTrack, draw, signal, start, end }) {
     const format = recordingFormat();
     if (!format) throw new Error('This browser cannot record canvas video');
-    await seek(media, 0);
+    await seek(media, start);
     signal.throwIfAborted();
-    draw();
-
-    const stream = canvas.captureStream(30);
+    // Keep the recorder independent of the layout and sizing of the preview canvas.
+    const recording = document.createElement('canvas');
+    recording.width = canvas.width;
+    recording.height = canvas.height;
+    const drawing = recording.getContext('2d', { alpha: false });
+    const stream = recording.captureStream(30);
+    const videoTrack = stream.getVideoTracks()[0];
     stream.addTrack(audioTrack);
+    function paintFrame() {
+        draw();
+        videoTrack.requestFrame?.();
+        drawing.drawImage(canvas, 0, 0);
+    }
     try {
         const recorder = new MediaRecorder(stream, { mimeType: format.mime, videoBitsPerSecond: 6_000_000 });
         const parts = [];
@@ -71,6 +80,13 @@ export async function recordCanvas({ canvas, media, audioTrack, draw, signal }) 
                 stop(new Error('Playback failed while recording'));
             }
 
+            const frameTimer = setInterval(() => {
+                if (media.currentTime >= end) {
+                    ended();
+                    return;
+                }
+                paintFrame();
+            }, 1000 / 30);
             const watchdog = setInterval(() => {
                 if (media.currentTime > lastTime) {
                     lastTime = media.currentTime;
@@ -82,6 +98,7 @@ export async function recordCanvas({ canvas, media, audioTrack, draw, signal }) 
 
             function cleanup() {
                 clearInterval(watchdog);
+                clearInterval(frameTimer);
                 media.removeEventListener('ended', ended);
                 media.removeEventListener('error', failed);
                 signal.removeEventListener('abort', abort);
@@ -106,6 +123,7 @@ export async function recordCanvas({ canvas, media, audioTrack, draw, signal }) 
             signal.addEventListener('abort', abort, { once: true });
             try {
                 recorder.start(1000);
+                paintFrame();
                 media.play().catch(error => stop(error));
             } catch (error) {
                 cleanup();

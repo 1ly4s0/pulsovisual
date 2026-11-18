@@ -1,6 +1,8 @@
 import { announce, bindControls, bindFileInput, byId, copy, download, filename, formatTime, setFileName } from './ui.js';
 import { recordCanvas, recordingFormat, seek } from './record.js';
-import { acceptsImage, acceptsAudio, draw, readSettings, sizeFor, suffix } from './effect.js';
+import { encodeMedia } from './mp4.js';
+import { canEncodeFrames, recordFrames } from './frame-recorder.js';
+import { acceptsImage, acceptsAudio, draw, looks, readSettings, sizeFor, suffix } from './effect.js';
 
 const canvas = byId('preview');
 const drawing = canvas.getContext('2d', { alpha: false });
@@ -10,6 +12,21 @@ const save = byId('save');
 const cancel = byId('cancel-render');
 const scrub = byId('seek');
 const studio = byId('studio');
+const formatInput = byId('export-format');
+const progress = byId('export-progress');
+const trim = byId('trim');
+const comparison = byId('comparison');
+const demoButton = byId('demo');
+const theme = document.documentElement.dataset.theme;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const lookButtons = [...controls.querySelectorAll('[data-look]')];
+const demos = {
+    vhs: ['demo-scene.webp', 'Última tarde.webp', 'Last Light.webp', 'image/webp'],
+    pulse: ['demo-track.mp3', 'Después de medianoche.mp3', 'After Midnight.mp3', 'audio/mpeg'],
+    vertical: ['demo-clip.webm', 'Bosque en movimiento.webm', 'Forest in Motion.webm', 'video/webm']
+};
+let demoArt;
+let previewPointer;
 let asset;
 let context;
 let graph;
@@ -18,7 +35,7 @@ let busy = false;
 let capture;
 
 function resize() {
-    const { width, height } = sizeFor(asset?.element, readSettings());
+    const { width, height } = sizeFor(asset?.element ?? demoArt, readSettings());
     if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
@@ -26,13 +43,15 @@ function resize() {
     }
 }
 
-function render() {
-    const media = asset?.element;
+function render(forExport = false) {
+    const media = asset?.element ?? demoArt;
     const background = byId('background')?.selectedImage;
     draw(drawing, media, readSettings(), {
         width: canvas.width,
         height: canvas.height,
-        time: media?.currentTime ?? 0,
+        time: media?.currentTime ?? (acceptsAudio && !reducedMotion.matches ? performance.now() / 1000 : 0),
+        comparison: forExport || capture || !comparison ? 0 : Number(comparison.value) / 100,
+        guides: !forExport && !capture && byId('safe-area')?.checked,
         analyser: graph?.analyser,
         background
     });
@@ -50,10 +69,11 @@ function updateTransport() {
 
 function animate() {
     cancelAnimationFrame(frame);
-    render();
+    if (!capture) render();
     updateTransport();
     const media = asset?.element;
-    if (media instanceof HTMLMediaElement && !media.paused && !media.ended) {
+    if ((media instanceof HTMLMediaElement && !media.paused && !media.ended) ||
+        (!asset && acceptsAudio && !reducedMotion.matches)) {
         frame = requestAnimationFrame(animate);
     }
 }
@@ -62,16 +82,20 @@ function setBusy(value) {
     busy = value;
     const timed = asset?.element instanceof HTMLMediaElement;
     controls.disabled = value;
+    formatInput.disabled = value;
+    demoButton.disabled = value;
+    if (trim) trim.disabled = value;
+    if (comparison) comparison.disabled = value;
     byId('file').disabled = value;
     play.disabled = value || !timed;
-    save.disabled = value || !asset || timed && !recordingFormat();
+    save.disabled = value || !asset || timed && !recordingFormat() && !('VideoEncoder' in window);
     scrub.disabled = value || !timed;
     cancel.hidden = !capture;
+    progress.hidden = !capture;
     studio.dataset.busy = String(value);
-    if (asset) {
-        const format = timed ? recordingFormat()?.extension.toUpperCase() ?? copy('video', 'vídeo') : 'PNG';
-        save.textContent = copy('Download ', 'Descargar ') + format;
-    }
+    byId('export-format-row').hidden = Boolean(asset && !timed);
+    const format = asset && !timed ? 'PNG' : formatInput.value.toUpperCase();
+    save.textContent = copy('Download ', 'Descargar ') + format;
 }
 
 async function openMedia(file) {
@@ -145,10 +169,18 @@ async function load(file) {
             setFileName(file, media.naturalWidth + ' × ' + media.naturalHeight);
         }
         byId('transport').hidden = !(media instanceof HTMLMediaElement);
+        if (trim) {
+            trim.hidden = !(media instanceof HTMLVideoElement);
+            if (!trim.hidden) {
+                byId('trim-in').value = '0';
+                byId('trim-out').value = media.duration.toFixed(3);
+                for (const field of trim.querySelectorAll('input')) field.max = media.duration;
+            }
+        }
         resize();
         animate();
         announce('');
-        if (media instanceof HTMLMediaElement && !recordingFormat()) {
+        if (media instanceof HTMLMediaElement && !recordingFormat() && !('VideoEncoder' in window)) {
             announce(copy('This browser can preview the file. Open this page in a browser with video recording to export.', 'Este navegador puede mostrar la vista previa. Para exportarla, abre la página en un navegador compatible con la grabación de vídeo.'));
         }
     } catch {
@@ -191,10 +223,84 @@ scrub.addEventListener('input', () => {
     asset.element.currentTime = Number(scrub.value);
 });
 
+function selectLook() {
+    for (const button of lookButtons) {
+        const look = looks[Number(button.dataset.look)];
+        const selected = Object.entries(look).every(([id, value]) => byId(id).value === String(value));
+        button.setAttribute('aria-pressed', String(selected));
+    }
+}
+
 controls.addEventListener('input', () => {
+    selectLook();
     resize();
     render();
 });
+for (const button of lookButtons) {
+    button.addEventListener('click', () => {
+        for (const [id, value] of Object.entries(looks[Number(button.dataset.look)])) byId(id).value = value;
+        controls.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+}
+if (comparison) {
+    comparison.addEventListener('input', () => {
+        document.querySelector('output[for="comparison"]').textContent = comparison.value + '%';
+        comparison.style.setProperty('--fill', comparison.value + '%');
+        render();
+    });
+}
+
+formatInput.addEventListener('change', () => setBusy(false));
+const nativeFormat = recordingFormat();
+if (nativeFormat?.extension === 'mp4') formatInput.querySelector('[value="webm"]').disabled = true;
+
+if (theme === 'vertical') {
+    canvas.addEventListener('pointerdown', event => {
+        if ((!asset && !demoArt) || busy || event.button !== 0) return;
+        previewPointer = {
+            id: event.pointerId, x: event.clientX, y: event.clientY,
+            left: Number(byId('position-x').value), top: Number(byId('position-y').value)
+        };
+        canvas.setPointerCapture(event.pointerId);
+    });
+    canvas.addEventListener('pointermove', event => {
+        if (previewPointer?.id !== event.pointerId || busy) return;
+        byId('position-x').value = Math.round(previewPointer.left - (event.clientX - previewPointer.x) / canvas.clientWidth * 100);
+        byId('position-y').value = Math.round(previewPointer.top - (event.clientY - previewPointer.y) / canvas.clientHeight * 100);
+        controls.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    canvas.addEventListener('lostpointercapture', () => { previewPointer = undefined; });
+}
+
+demoButton.addEventListener('click', async () => {
+    if (busy) return;
+    const [path, es, en, type] = demos[theme];
+    setBusy(true);
+    announce(copy('Opening the demo…', 'Abriendo la demo…'));
+    try {
+        const response = await fetch(new URL(path, import.meta.url));
+        if (!response.ok) throw new Error('Could not load sample');
+        const file = new File([await response.blob()], copy(en, es), { type });
+        setBusy(false);
+        await load(file);
+        if (acceptsAudio && asset?.file === file) play.click();
+    } catch {
+        setBusy(false);
+        announce(copy('Could not open the demo. You can still use your own files.', 'No se pudo abrir la demo. Puedes usar tus propios archivos.'), true);
+    }
+});
+
+if (!acceptsAudio) {
+    const art = new Image();
+    art.src = new URL('demo-scene.webp', import.meta.url);
+    art.decode().then(() => {
+        if (asset) return;
+        demoArt = art;
+        studio.classList.add('has-demo-scene');
+        resize();
+        render();
+    }).catch(() => {});
+}
 
 const backgroundInput = byId('background');
 if (backgroundInput) {
@@ -221,8 +327,12 @@ if (backgroundInput) {
 
 function exportImage() {
     return new Promise((resolve, reject) => {
-        render();
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas could not create a PNG')), 'image/png');
+        render(true);
+        canvas.toBlob(blob => {
+            render();
+            if (blob) resolve(blob);
+            else reject(new Error('Canvas could not create a PNG'));
+        }, 'image/png');
     });
 }
 
@@ -255,46 +365,99 @@ async function checkVideo(blob) {
     }
 }
 
+function getTrim(media) {
+    if (!trim || trim.hidden) return { start: 0, end: media.duration };
+    const startInput = byId('trim-in');
+    const endInput = byId('trim-out');
+    const start = startInput.valueAsNumber;
+    const end = Math.min(media.duration, endInput.valueAsNumber);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) {
+        throw new Error('invalid-trim');
+    }
+    return { start, end };
+}
+
 async function exportVideo(media) {
+    const { start, end } = getTrim(media);
+    const wanted = formatInput.value;
     const { analyser, monitor } = connectAudio(media);
     await context.resume();
-    const destination = context.createMediaStreamDestination();
     const previousTime = media.currentTime;
-    const audioTrack = destination.stream.getAudioTracks()[0];
     media.pause();
     monitor.gain.value = 0;
-    analyser.connect(destination);
     const drawFrame = () => {
         render();
-        const percentage = Math.floor(media.currentTime / media.duration * 100);
-        announce(copy('Recording the video. Keep this tab visible.', 'Grabando el vídeo. Mantén esta pestaña visible.') + ' ' + percentage + '%');
+        progress.value = Math.max(0, Math.min(100, (media.currentTime - start) / (end - start) * 100));
     };
-    // The normal preview loop draws into the same canvas as the recorder.
-    const report = setInterval(drawFrame, 220);
+    const signal = capture.signal;
+    const frameOptions = { canvas, media, draw: drawFrame, signal, start, end };
+    const canRecordFrames = await canEncodeFrames(canvas);
+    announce(copy('Recording the video. Keep this tab visible.', 'Grabando el vídeo. Mantén esta pestaña visible.'));
+
+    async function encode(input) {
+        progress.removeAttribute('value');
+        announce(copy('Loading the video encoder…', 'Cargando el codificador de vídeo…'));
+        const blob = await encodeMedia(input, signal, update => {
+            if (update.stage) announce(copy('Preparing your ' + wanted.toUpperCase() + '…', 'Preparando tu ' + wanted.toUpperCase() + '…'));
+            else progress.value = update.progress;
+        });
+        return { blob, extension: wanted };
+    }
+
+    async function recordAndMux() {
+        const frames = await recordFrames(frameOptions);
+        // Mux directly from the original file to preserve the selected audio, including a trim.
+        return encode({ blob: frames, source: asset.file, start, duration: end - start, extension: wanted });
+    }
+
+    async function recordNative() {
+        const destination = context.createMediaStreamDestination();
+        const audioTrack = destination.stream.getAudioTracks()[0];
+        analyser.connect(destination);
+        try {
+            return await recordCanvas({ ...frameOptions, audioTrack });
+        } finally {
+            media.pause();
+            analyser.disconnect(destination);
+            audioTrack.stop();
+        }
+    }
+
     try {
-        const result = await recordCanvas({ canvas, media, audioTrack, draw: drawFrame, signal: capture.signal });
-        if (result.extension === 'webm') {
-            const { writeWebmDuration } = await import('./webm-duration.js');
-            result.blob = await writeWebmDuration(result.blob, media.duration);
+        let result;
+        if (canRecordFrames && (wanted === 'mp4' || !recordingFormat())) {
+            result = await recordAndMux();
+        } else {
+            try {
+                result = await recordNative();
+                if (result.extension === 'webm') {
+                    const { writeWebmDuration } = await import('./webm-duration.js');
+                    result.blob = await writeWebmDuration(result.blob, end - start);
+                    if (wanted === 'mp4') result = await encode({ blob: result.blob, extension: wanted });
+                }
+                await checkVideo(result.blob);
+            } catch (error) {
+                if (!canRecordFrames || signal.aborted) throw error;
+                result = await recordAndMux();
+            }
         }
         await checkVideo(result.blob);
-        capture.signal.throwIfAborted();
+        signal.throwIfAborted();
         return result;
     } finally {
-        clearInterval(report);
         media.pause();
         monitor.gain.value = 1;
-        analyser.disconnect(destination);
-        audioTrack.stop();
         await seek(media, previousTime).catch(() => {});
-        animate();
     }
 }
 
 save.addEventListener('click', async () => {
     if (!asset || busy) return;
     const media = asset.element;
-    if (media instanceof HTMLMediaElement) capture = new AbortController();
+    if (media instanceof HTMLMediaElement) {
+        capture = new AbortController();
+        progress.value = 0;
+    }
     setBusy(true);
     announce(copy('Preparing your download…', 'Preparando la descarga…'));
     try {
@@ -303,10 +466,13 @@ save.addEventListener('click', async () => {
         announce(copy('Your download has started.', 'La descarga ha comenzado.'));
     } catch (error) {
         if (error.name === 'AbortError') announce(copy('Export canceled.', 'Exportación cancelada.'));
+        else if (error.message === 'invalid-trim') announce(copy('Choose an end time after the start.', 'Elige un final posterior al inicio.'), true);
+        else if (error.message === 'encoder-load') announce(copy('The video encoder could not load. Check your connection and try again.', 'No se pudo cargar el codificador de vídeo. Comprueba tu conexión y vuelve a intentarlo.'), true);
         else announce(copy('Could not export this file. Try a shorter clip or another browser.', 'No se pudo exportar el archivo. Prueba con un clip más corto u otro navegador.'), true);
     } finally {
         capture = undefined;
         setBusy(false);
+        animate();
     }
 });
 
@@ -314,5 +480,7 @@ cancel.addEventListener('click', () => capture?.abort());
 bindControls();
 bindFileInput(load);
 setBusy(false);
+selectLook();
 resize();
-render();
+animate();
+reducedMotion.addEventListener('change', animate);
